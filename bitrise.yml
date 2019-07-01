@@ -40,6 +40,7 @@ workflows:
           file if you would not specify another value.
         run_if: true
         inputs:
+        - moravia_production: $MORAVIA_PRODUCTION
         - moravia_config: $MORAVIA_CONFIG
         - moravia_client_id: $MORAVIA_CLIENT_ID
         - moravia_client_secret: $MORAVIA_CLIENT_SECRET

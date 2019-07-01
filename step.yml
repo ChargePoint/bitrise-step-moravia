@@ -104,6 +104,15 @@ inputs:
         Can be Markdown formatted text.
       is_required: true
       is_sensitive: true
+  - moravia_production: "false"
+    opts:
+      title: "Use Moravia production environment?"
+      description: |
+        If true, uses Moravia production environment.
+        If false, uses Moravia test environment
+      value_options:
+      - "true"
+      - "false"
 
 outputs:
   - MORAVIA_JOB_DETAIL_URL:

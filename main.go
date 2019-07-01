@@ -23,11 +23,43 @@ var serviceAccount string
 
 var httpClient = &http.Client{Timeout: 200 * time.Second}
 
-var moraviaBaseURL = "https://test-projects.moravia.com/Api/V4"
-var moraviaLoginURL = "https://test-login.moravia.com/connect/token"
-var moraviaJobsURL = moraviaBaseURL + "/Jobs"
-var moraviaJobAttachmentsURL = moraviaBaseURL + "/jobattachments"
-var moraviaProjectsURL = moraviaBaseURL + "/Projects"
+func getenv(key, fallback string) string {
+	value := os.Getenv(key)
+	if len(value) == 0 {
+		return fallback
+	}
+	return value
+}
+
+func moraviaBaseURL() string {
+	useProd := getenv("moravia_production", "false")
+	if useProd == "true" {
+		return "https://projects.moravia.com/Api/V4"
+	} else {
+		return "https://test-projects.moravia.com/Api/V4"
+	}
+}
+
+func moraviaLoginURL() string {
+	useProd := getenv("moravia_production", "false")
+	if useProd == "true" {
+		return "https://login.moravia.com/connect/token"
+	} else {
+		return "https://test-login.moravia.com/connect/token"
+	}
+}
+
+func moraviaJobsURL() string {
+	return moraviaBaseURL() + "/Jobs"
+}
+
+func moraviaJobAttachmentsURL() string {
+	return moraviaBaseURL() + "/jobattachments"
+}
+
+func moraviaProjectsURL() string {
+	return moraviaBaseURL() + "/Projects"
+}
 
 type MoraviaProjectConfiguration struct {
 	Id int `yaml:"id"`
@@ -73,7 +105,7 @@ func authenticate(clientID string, clientSecret string, serviceAccount string, t
 	bodyString += "&scope=symfonie2-api&service_account=" + serviceAccount
 
 	body := strings.NewReader(bodyString)
-	req, err := http.NewRequest("POST", moraviaLoginURL, body)
+	req, err := http.NewRequest("POST", moraviaLoginURL(), body)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -107,6 +139,15 @@ type Jobs struct {
 	Value []Job `json:"value"`
 }
 
+func moraviaPortalJobDetailsURL(job Job) string {
+	useProd := getenv("moravia_production", "false")
+	if useProd == "true" {
+		return "https://projects.moravia.com/jobs/" + string(job.Id) + "/detail"
+	} else {
+		return "https://test-projects.moravia.com/jobs/" + string(job.Id) + "/detail"
+	}
+}
+
 func jobFromTemplate(filepath string, target interface{}) {
 	// TODO: Alex - fill in template
 }
@@ -118,7 +159,7 @@ func findJob(name string, auth AuthenticateResponse, target interface{}) error {
 
 	// https://projects.moravia.com/api/V3/Jobs?$filter=State eq Moravia.Symfonie.Data.JobState'Order'
 
-	projectSearchURL := moraviaJobsURL + "?$filter=State eq " + "Moravia.Symfonie.Data.JobState'" + name + "'"
+	projectSearchURL := moraviaJobsURL() + "?$filter=State eq " + "Moravia.Symfonie.Data.JobState'" + name + "'"
 	// projectSearchURL := moraviaProjectsURL + "?$filter=Id eq 111111"
 	fmt.Println(projectSearchURL)
 
@@ -151,7 +192,7 @@ func listJobs(auth AuthenticateResponse, target interface{}) error {
 	var bodyString = ""
 
 	body := strings.NewReader(bodyString)
-	req, err := http.NewRequest("GET", moraviaJobsURL, body)
+	req, err := http.NewRequest("GET", moraviaJobsURL(), body)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -172,7 +213,7 @@ func createJob(job Job, auth AuthenticateResponse, target interface{}) error {
 	body := new(bytes.Buffer)
 	json.NewEncoder(body).Encode(job)
 
-	req, err := http.NewRequest("POST", moraviaJobsURL, body)
+	req, err := http.NewRequest("POST", moraviaJobsURL(), body)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -279,7 +320,7 @@ func uploadAttachment(attachment Attachment, auth AuthenticateResponse) {
 		"file": mustOpen(attachment.AttachmentFilePath),
 		"json": jsonData,
 	}
-	err := upload(httpClient, moraviaJobAttachmentsURL, auth, values)
+	err := upload(httpClient, moraviaJobAttachmentsURL(), auth, values)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -289,7 +330,7 @@ func listJobAttachments(auth AuthenticateResponse) {
 	var bodyString = ""
 
 	body := strings.NewReader(bodyString)
-	req, err := http.NewRequest("GET", moraviaJobAttachmentsURL, body)
+	req, err := http.NewRequest("GET", moraviaJobAttachmentsURL(), body)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -330,7 +371,7 @@ func findProject(name string, auth AuthenticateResponse, target interface{}) err
 
 	// https://projects.moravia.com/api/V3/Jobs?$filter=State eq Moravia.Symfonie.Data.JobState'Order'
 
-	projectSearchURL := moraviaProjectsURL + "?$filter=contains(Name, '" + name + "')"
+	projectSearchURL := moraviaProjectsURL() + "?$filter=contains(Name, '" + name + "')"
 	// projectSearchURL := moraviaProjectsURL + "?$filter=Id eq 439741"
 	fmt.Println(projectSearchURL)
 
@@ -363,7 +404,7 @@ func listProjects(auth AuthenticateResponse, target interface{}) error {
 	var bodyString = ""
 
 	body := strings.NewReader(bodyString)
-	req, err := http.NewRequest("GET", moraviaProjectsURL, body)
+	req, err := http.NewRequest("GET", moraviaProjectsURL(), body)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -414,14 +455,6 @@ func exampleUploadAttachment(source *string, auth AuthenticateResponse) {
 }
 
 ////
-
-func getenv(key, fallback string) string {
-	value := os.Getenv(key)
-	if len(value) == 0 {
-		return fallback
-	}
-	return value
-}
 
 func main() {
 	moraviaConfigFilepath := getenv("moravia_config", "moravia.yml")
@@ -496,14 +529,14 @@ func main() {
 
 	uploadAttachment(attachment, auth)
 
-	moraviaPortalJobDetailsURL := "https://test-projects.moravia.com/jobs/" + string(job.Id) + "/detail"
+	portalURL := moraviaPortalJobDetailsURL(job)
 
 	//
 	// --- Step Outputs: Export Environment Variables for other Steps:
 	// You can export Environment Variables for other Steps with
 	//  envman, which is automatically installed by `bitrise setup`.
 	// A very simple example:
-	cmdLog, err := exec.Command("bitrise", "envman", "add", "--key", "MORAVIA_JOB_DETAIL_URL", "--value", moraviaPortalJobDetailsURL).CombinedOutput()
+	cmdLog, err := exec.Command("bitrise", "envman", "add", "--key", "MORAVIA_JOB_DETAIL_URL", "--value", portalURL).CombinedOutput()
 	if err != nil {
 		fmt.Printf("Failed to expose output with envman, error: %#v | output: %s", err, cmdLog)
 	}
