@@ -1,0 +1,13 @@
+--- 
+job_template: 
+  name: "iOS Automated Submission"
+  source: testdata/en.xliff
+  source_language: en
+  target_languages: 
+    - de
+    - en-GB
+    - es
+    - fr-CA
+    - fr-FR
+    - it
+    - nl

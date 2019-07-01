@@ -40,7 +40,10 @@ workflows:
           file if you would not specify another value.
         run_if: true
         inputs:
-        - example_step_input: Example Step Input's value
+        - moravia_config: $MORAVIA_CONFIG
+        - moravia_client_id: $MORAVIA_CLIENT_ID
+        - moravia_client_secret: $MORAVIA_CLIENT_SECRET
+        - moravia_service_account: $MORAVIA_SERVICE_ACCOUNT
     - script:
         inputs:
         - content: |
