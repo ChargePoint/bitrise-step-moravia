@@ -473,10 +473,11 @@ func main() {
 	authenticate(clientID, clientSecret, serviceAccount, &auth)
 
 	currentTime := time.Now()
-	dateString := currentTime.Format(time.RFC3339)
+	// Golang wat - https://gobyexample.com/time-formatting-parsing
+	dateString := currentTime.Format("20060102")
 
 	job := Job{}
-	job.Name = "Automated Request " + dateString
+	job.Name = dateString + " - " + configuration.Job_template.Name
 	job.ProjectId = configuration.Project.Id
 	job.SourceLanguageCode = configuration.Job_template.Source_language
 	job.TargetLanguageCodes = configuration.Job_template.Target_languages
