@@ -2,12 +2,12 @@
 job_template: 
   name: "iOS Automated Submission"
   source: testdata/en.xliff
-  source_language: en
+  source_language: en-US
   target_languages: 
-    - de
+    - de-DE
     - en-GB
-    - es
+    - es-ES
     - fr-CA
     - fr-FR
-    - it
-    - nl
+    - it-IT
+    - nl-NL

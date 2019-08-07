@@ -13,9 +13,33 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
+
+// type MoraviaDateTimeOffset time.Time
+//
+// func (j *MoraviaDateTimeOffset) UnmarshalJSON(b []byte) error {
+//     s := strings.Trim(string(b), "\"")
+//     t, err := time.Parse("2006-01-02T15:04:05.9999999Z", s)
+//     if err != nil {
+//         return err
+//     }
+//     *j = MoraviaDateTimeOffset(t)
+//     return nil
+// }
+//
+// func (j MoraviaDateTimeOffset) MarshalJSON() ([]byte, error) {
+//     s := j.Format("2006-01-02T15:04:05.9999999Z")
+//     return []byte(s), nil
+// }
+//
+// // Maybe a Format function for printing your date
+// func (j MoraviaDateTimeOffset) Format(s string) string {
+//     t := time.Time(j)
+//     return t.Format(s)
+// }
 
 var clientID string
 var clientSecret string
@@ -57,6 +81,10 @@ func moraviaJobAttachmentsURL() string {
 	return moraviaBaseURL() + "/jobattachments"
 }
 
+func moraviaJobCustomFieldsURL() string {
+	return moraviaBaseURL() + "/JobCustomFields"
+}
+
 func moraviaProjectsURL() string {
 	return moraviaBaseURL() + "/Projects"
 }
@@ -65,11 +93,21 @@ type MoraviaProjectConfiguration struct {
 	Id int `yaml:"id"`
 }
 
+type MoraviaJobCustomFieldConfiguration struct {
+	Group                string          `yaml:"group"`
+	Name                 string          `yaml:"name"`
+	Type                 CustomFieldType `yaml:"type"`
+	Choices              []string        `yaml:"choices"`
+	Is_language_specific bool            `yaml:"is_language_specific"`
+	Value                []string        `yaml:"value"`
+}
+
 type MoraviaJobTemplateConfiguration struct {
-	Name             string   `yaml:"name"`
-	Source           string   `yaml:"source"`
-	Source_language  string   `yaml:"source_language"`
-	Target_languages []string `yaml:"target_languages"`
+	Name             string                               `yaml:"name"`
+	Source           string                               `yaml:"source"`
+	Source_language  string                               `yaml:"source_language"`
+	Target_languages []string                             `yaml:"target_languages"`
+	Custom_fields    []MoraviaJobCustomFieldConfiguration `yaml:"custom_fields"`
 }
 
 type MoraviaConfiguration struct {
@@ -80,12 +118,12 @@ type MoraviaConfiguration struct {
 func (config *MoraviaConfiguration) readFromFile(filepath string) *MoraviaConfiguration {
 	yamlFile, err := ioutil.ReadFile(filepath)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 		return nil
 	}
 	err = yaml.Unmarshal(yamlFile, config)
 	if err != nil {
-		fmt.Println(err)
+		log.Fatal(err)
 		return nil
 	}
 
@@ -142,9 +180,9 @@ type Jobs struct {
 func moraviaPortalJobDetailsURL(job Job) string {
 	useProd := getenv("moravia_production", "false")
 	if useProd == "true" {
-		return "https://projects.moravia.com/jobs/" + string(job.Id) + "/detail"
+		return "https://projects.moravia.com/jobs/" + strconv.Itoa(job.Id) + "/detail"
 	} else {
-		return "https://test-projects.moravia.com/jobs/" + string(job.Id) + "/detail"
+		return "https://test-projects.moravia.com/jobs/" + strconv.Itoa(job.Id) + "/detail"
 	}
 }
 
@@ -229,13 +267,124 @@ func createJob(job Job, auth AuthenticateResponse, target interface{}) error {
 
 	if resp.StatusCode == 201 {
 		fmt.Println("Created job " + job.Name)
+	} else {
+		fmt.Println("Failed to create job")
+		fmt.Println(resp)
 	}
 
 	// responseData, sErr := ioutil.ReadAll(resp.Body)
 	// if sErr != nil {
-	// 	log.Fatal(sErr)
+	//     log.Fatal(sErr)
 	// }
 	// fmt.Println(string(responseData))
+	// return nil
+
+	return json.NewDecoder(resp.Body).Decode(target)
+}
+
+type CustomFieldType string
+
+const (
+	Text            CustomFieldType = "Text"
+	Number          CustomFieldType = "Number"
+	DateTime        CustomFieldType = "DateTime"
+	Choices         CustomFieldType = "Choices"
+	ChoicesMultiple CustomFieldType = "ChoicesMultiple"
+	TextArea        CustomFieldType = "TextArea"
+	Checkbox        CustomFieldType = "Checkbox"
+)
+
+type CustomFieldPermission string
+
+const (
+	None CustomFieldPermission = "None"
+	Read CustomFieldPermission = "Read"
+	Edit CustomFieldPermission = "Edit"
+)
+
+type JobCustomField struct {
+	CustomFieldId            int                   // Identifier
+	DefinitionAdditionalData string                // Will be csl list of choices for choice/multi-choice
+	DefinitionFormatter      CustomFieldType       // What kind of field is this - Choices, Text, etc.
+	DefinitionKey            string                // Shadow copy of field name?
+	Group                    string                // User facing name of group this field is shown under
+	HandoffId                int                   // Job ID
+	InternalPermission       CustomFieldPermission // Read/Edit permission for internal users
+	IsLanguageSpecific       bool                  // True if this field is language-specific
+	Name                     string                // User facing name of field
+	NonInternalPermission    CustomFieldPermission // Read/Edit permission for externals
+	RequestorId              int                   // ID of the user who requested this field
+	// UpdatedAt                MoraviaDateTimeOffset
+	Value string // Value of this field
+}
+
+type JobCustomFields struct {
+	Value []JobCustomField `json:"value"`
+}
+
+func listJobCustomFields(auth AuthenticateResponse, target interface{}) error {
+	var bodyString = ""
+
+	body := strings.NewReader(bodyString)
+	req, err := http.NewRequest("GET", moraviaJobCustomFieldsURL(), body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	authorization_value := "Bearer " + auth.Access_token
+	req.Header.Set("Authorization", authorization_value)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// If you want to print out the JSON response
+	// responseData, sErr := ioutil.ReadAll(resp.Body)
+	// if sErr != nil {
+	//     log.Fatal(sErr)
+	// }
+	// fmt.Println(string(responseData))
+	// return nil
+
+	return json.NewDecoder(resp.Body).Decode(target)
+}
+
+func createJobCustomField(auth AuthenticateResponse, customField JobCustomField, target interface{}) error {
+	// customFieldJSON, _ := json.Marshal(customField)
+	// fmt.Println(string(customFieldJSON))
+
+	body := new(bytes.Buffer)
+	json.NewEncoder(body).Encode(customField)
+
+	req, err := http.NewRequest("POST", moraviaJobCustomFieldsURL(), body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	authorization_value := "Bearer " + auth.Access_token
+	req.Header.Set("Authorization", authorization_value)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 201 {
+		fmt.Println("Created job custom field")
+	} else {
+		fmt.Println("Failed to create job custom field")
+		fmt.Println(resp)
+	}
+
+	// If you want to print out the JSON response
+	// responseData, sErr := ioutil.ReadAll(resp.Body)
+	// if sErr != nil {
+	//     log.Fatal(sErr)
+	// }
+	// fmt.Println(string(responseData))
+	// return nil
 
 	return json.NewDecoder(resp.Body).Decode(target)
 }
@@ -258,6 +407,7 @@ func mustOpen(filePath string) *os.File {
 
 func upload(client *http.Client, url string, auth AuthenticateResponse, values map[string]io.Reader) (err error) {
 	// Prepare a form that you will submit to that URL.
+	print("Uploading...\n")
 	var b bytes.Buffer
 	w := multipart.NewWriter(&b)
 	for key, r := range values {
@@ -462,8 +612,6 @@ func main() {
 	var configuration MoraviaConfiguration
 	configuration.readFromFile(moraviaConfigFilepath)
 
-	fmt.Println(configuration)
-
 	clientID := getenv("moravia_client_id", "")
 	clientSecret := getenv("moravia_client_secret", "")
 	serviceAccount := getenv("moravia_service_account", "")
@@ -504,6 +652,17 @@ func main() {
 
 	auth := AuthenticateResponse{}
 	authenticate(clientID, clientSecret, serviceAccount, &auth)
+	if auth.Access_token == "" {
+		fmt.Println("Failed to authenticate with Moravia")
+		os.Exit(1)
+	}
+	// fmt.Println(auth)
+
+	// customFields := JobCustomFields{}
+	// customErr := listJobCustomFields(auth, &customFields)
+	// if customErr != nil {
+	//     log.Fatal(customErr)
+	// }
 
 	currentTime := time.Now()
 	// Golang wat - https://gobyexample.com/time-formatting-parsing
@@ -519,6 +678,30 @@ func main() {
 		log.Fatal(err)
 	}
 
+	fmt.Println(job)
+
+	// Update the job custom fields
+	for _, fieldConfig := range configuration.Job_template.Custom_fields {
+		customField := JobCustomField{}
+		customField.Group = fieldConfig.Group
+		customField.Name = fieldConfig.Name
+		customField.DefinitionKey = fieldConfig.Name
+		customField.InternalPermission = "Edit"
+		customField.NonInternalPermission = "Edit"
+		customField.DefinitionFormatter = fieldConfig.Type
+		customField.DefinitionAdditionalData = strings.Join(fieldConfig.Choices[:], ",")
+		customField.IsLanguageSpecific = fieldConfig.Is_language_specific
+		customField.Value = strings.Join(fieldConfig.Value[:], ",")
+		customField.HandoffId = job.Id
+
+		fmt.Println(customField)
+
+		customFieldErr := createJobCustomField(auth, customField, &customField)
+		if customFieldErr != nil {
+			log.Fatal(customFieldErr)
+		}
+	}
+
 	_, filename := filepath.Split(configuration.Job_template.Source)
 
 	attachment := Attachment{}
@@ -530,6 +713,8 @@ func main() {
 	uploadAttachment(attachment, auth)
 
 	portalURL := moraviaPortalJobDetailsURL(job)
+
+	fmt.Println(portalURL)
 
 	//
 	// --- Step Outputs: Export Environment Variables for other Steps:
