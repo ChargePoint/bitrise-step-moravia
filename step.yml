@@ -64,24 +64,62 @@ toolkit:
 
 
 inputs:
-  - example_step_input: Default Value - you can leave this empty if you want to
+  - moravia_config:
     opts:
-      title: "Example Step Input"
-      summary: Summary. No more than 2-3 sentences.
+      title: "Moravia Configuration"
+      summary: YAML configuration filepath
       description: |
-        Description of this input.
+        YAML configuration filepath
 
         Can be Markdown formatted text.
-      is_expand: true
+      is_required: false
+      is_sensitive: false
+  - moravia_client_id:
+    opts:
+      title: "Moravia Client ID"
+      summary: Client ID provided to you by Moravia for Moravia API
+      description: |
+        Client ID provided to you by Moravia for Moravia API
+
+        Can be Markdown formatted text.
       is_required: true
-      value_options: []
+      is_sensitive: true
+  - moravia_client_secret:
+    opts:
+      title: "Moravia Client Secret"
+      summary: Client secret provided to you by Moravia for Moravia API
+      description: |
+        Client secret provided to you by Moravia for Moravia API
+
+        Can be Markdown formatted text.
+      is_required: true
+      is_sensitive: true
+  - moravia_service_account:
+    opts:
+      title: "Moravia Service Account"
+      summary: Service account provided to you by Moravia for Moravia API
+      description: |
+        Service account provided to you by Moravia for Moravia API
+
+        Can be Markdown formatted text.
+      is_required: true
+      is_sensitive: true
+  - moravia_production: "false"
+    opts:
+      title: "Use Moravia production environment?"
+      description: |
+        If true, uses Moravia production environment.
+        If false, uses Moravia test environment
+      value_options:
+      - "true"
+      - "false"
 
 outputs:
-  - EXAMPLE_STEP_OUTPUT:
+  - MORAVIA_JOB_DETAIL_URL:
     opts:
-      title: "Example Step Output"
-      summary: Summary. No more than 2-3 sentences.
+      title: "Moravia Job Detail URL"
+      summary: URL for the job created with Moravia
       description: |
-        Description of this output.
+        URL for the job created with Moravia
 
         Can be Markdown formatted text.
