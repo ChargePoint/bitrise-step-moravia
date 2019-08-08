@@ -303,23 +303,52 @@ const (
 )
 
 type JobCustomField struct {
-	CustomFieldId            int                   // Identifier
-	DefinitionAdditionalData string                // Will be csl list of choices for choice/multi-choice
-	DefinitionFormatter      CustomFieldType       // What kind of field is this - Choices, Text, etc.
-	DefinitionKey            string                // Shadow copy of field name?
-	Group                    string                // User facing name of group this field is shown under
-	HandoffId                int                   // Job ID
-	InternalPermission       CustomFieldPermission // Read/Edit permission for internal users
-	IsLanguageSpecific       bool                  // True if this field is language-specific
-	Name                     string                // User facing name of field
-	NonInternalPermission    CustomFieldPermission // Read/Edit permission for externals
-	RequestorId              int                   // ID of the user who requested this field
+	CustomFieldId            int                   `json:",omitempty"` // Identifier
+	DefinitionAdditionalData string                `json:",omitempty"` // Will be csl list of choices for choice/multi-choice
+	DefinitionFormatter      CustomFieldType       `json:",omitempty"` // What kind of field is this - Choices, Text, etc.
+	DefinitionKey            string                `json:",omitempty"` // Shadow copy of field name?
+	Group                    string                `json:",omitempty"` // User facing name of group this field is shown under
+	HandoffId                int                   `json:",omitempty"` // Job ID
+	InternalPermission       CustomFieldPermission `json:",omitempty"` // Read/Edit permission for internal users
+	IsLanguageSpecific       bool                  `json:",omitempty"` // True if this field is language-specific
+	Name                     string                `json:",omitempty"` // User facing name of field
+	NonInternalPermission    CustomFieldPermission `json:",omitempty"` // Read/Edit permission for externals
+	RequestorId              int                   `json:",omitempty"` // ID of the user who requested this field
 	// UpdatedAt                MoraviaDateTimeOffset
-	Value string // Value of this field
+	Value string `json:",omitempty"` // Value of this field
 }
 
 type JobCustomFields struct {
 	Value []JobCustomField `json:"value"`
+}
+
+func listJobCustomFieldsForJob(auth AuthenticateResponse, job Job, target interface{}) error {
+	var bodyString = ""
+
+	body := strings.NewReader(bodyString)
+	url := moraviaJobCustomFieldsURL() + "?$filter=HandoffId%20eq%20" + strconv.Itoa(job.Id)
+	req, err := http.NewRequest("GET", url, body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	authorization_value := "Bearer " + auth.Access_token
+	req.Header.Set("Authorization", authorization_value)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	// If you want to print out the JSON response
+	// responseData, sErr := ioutil.ReadAll(resp.Body)
+	// if sErr != nil {
+	//     log.Fatal(sErr)
+	// }
+	// fmt.Println(string(responseData))
+	// return nil
+
+	return json.NewDecoder(resp.Body).Decode(target)
 }
 
 func listJobCustomFields(auth AuthenticateResponse, target interface{}) error {
@@ -338,6 +367,90 @@ func listJobCustomFields(auth AuthenticateResponse, target interface{}) error {
 		log.Fatal(err)
 	}
 	defer resp.Body.Close()
+
+	// If you want to print out the JSON response
+	// responseData, sErr := ioutil.ReadAll(resp.Body)
+	// if sErr != nil {
+	//     log.Fatal(sErr)
+	// }
+	// fmt.Println(string(responseData))
+	// return nil
+
+	return json.NewDecoder(resp.Body).Decode(target)
+}
+
+// Will update if it exists, create if it doesn't
+func updateJobCustomFields(auth AuthenticateResponse, customFields JobCustomFields, target interface{}) error {
+	jobsToExistingCustomFields := make(map[int]map[string]*JobCustomField)
+
+	for _, customField := range customFields.Value {
+		// Check to see if we have a map for the existing custom fields for this job yet
+		existingCustomFieldMap := jobsToExistingCustomFields[customField.HandoffId]
+		if existingCustomFieldMap == nil {
+			// Get the custom fields for this Job
+			job := Job{}
+			job.Id = customField.HandoffId
+
+			existingCustomFields := JobCustomFields{}
+			customErr := listJobCustomFieldsForJob(auth, job, &existingCustomFields)
+			if customErr != nil {
+				log.Fatal(customErr)
+			}
+
+			existingCustomFieldMap = make(map[string]*JobCustomField)
+			for i, field := range existingCustomFields.Value {
+				existingCustomFieldMap[field.Name] = &existingCustomFields.Value[i]
+			}
+			jobsToExistingCustomFields[job.Id] = existingCustomFieldMap
+		}
+
+		// See if there is an existing custom field
+		existingCustomField := existingCustomFieldMap[customField.Name]
+		if existingCustomField != nil {
+			// Do an update
+			updatesOnly := JobCustomField{}
+			updatesOnly.Value = customField.Value
+
+			updateJobCustomField(auth, (*existingCustomField).CustomFieldId, updatesOnly, nil)
+		} else {
+			// Create the new field
+			createJobCustomField(auth, customField, &customField)
+		}
+	}
+
+	return nil
+}
+
+func updateJobCustomField(auth AuthenticateResponse, fieldId int, customField JobCustomField, target interface{}) error {
+	// customFieldJSON, _ := json.Marshal(customField)
+	// fmt.Println(string(customFieldJSON))
+
+	body := new(bytes.Buffer)
+	json.NewEncoder(body).Encode(customField)
+
+	url := moraviaJobCustomFieldsURL() + "(" + strconv.Itoa(fieldId) + ")"
+	req, err := http.NewRequest("PATCH", url, body)
+	if err != nil {
+		log.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	authorization_value := "Bearer " + auth.Access_token
+	req.Header.Set("Authorization", authorization_value)
+
+	resp, err := httpClient.Do(req)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == 200 {
+		fmt.Println("Updated job custom field " + strconv.Itoa(fieldId))
+	} else if resp.StatusCode == 204 {
+		fmt.Println("Updated job custom field " + strconv.Itoa(fieldId) + ". No content.")
+	} else {
+		fmt.Println("Failed to update job custom field " + strconv.Itoa(fieldId))
+		fmt.Println(resp)
+	}
 
 	// If you want to print out the JSON response
 	// responseData, sErr := ioutil.ReadAll(resp.Body)
@@ -372,9 +485,9 @@ func createJobCustomField(auth AuthenticateResponse, customField JobCustomField,
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 201 {
-		fmt.Println("Created job custom field")
+		fmt.Println("Created job custom field \"" + customField.Name + "\"")
 	} else {
-		fmt.Println("Failed to create job custom field")
+		fmt.Println("Failed to create job custom field \"" + customField.Name + "\"")
 		fmt.Println(resp)
 	}
 
@@ -658,11 +771,19 @@ func main() {
 	}
 	// fmt.Println(auth)
 
+	// Debug the prod Job custom fields
+	// prodJob := Job{}
+	// prodJob.Id = 473158
+	//
 	// customFields := JobCustomFields{}
-	// customErr := listJobCustomFields(auth, &customFields)
+	// customErr := listJobCustomFieldsForJob(auth, prodJob, &customFields)
 	// if customErr != nil {
 	//     log.Fatal(customErr)
 	// }
+	//
+	// customFieldJSON, _ := json.Marshal(customFields)
+	// fmt.Println(string(customFieldJSON))
+	// os.Exit(0)
 
 	currentTime := time.Now()
 	// Golang wat - https://gobyexample.com/time-formatting-parsing
@@ -681,6 +802,7 @@ func main() {
 	fmt.Println(job)
 
 	// Update the job custom fields
+	customFields := JobCustomFields{}
 	for _, fieldConfig := range configuration.Job_template.Custom_fields {
 		customField := JobCustomField{}
 		customField.Group = fieldConfig.Group
@@ -694,12 +816,11 @@ func main() {
 		customField.Value = strings.Join(fieldConfig.Value[:], ",")
 		customField.HandoffId = job.Id
 
-		fmt.Println(customField)
-
-		customFieldErr := createJobCustomField(auth, customField, &customField)
-		if customFieldErr != nil {
-			log.Fatal(customFieldErr)
-		}
+		customFields.Value = append(customFields.Value, customField)
+	}
+	customFieldErr := updateJobCustomFields(auth, customFields, nil)
+	if customFieldErr != nil {
+		log.Fatal(customFieldErr)
 	}
 
 	_, filename := filepath.Split(configuration.Job_template.Source)
